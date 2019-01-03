@@ -136,7 +136,7 @@ func (f *smbFile) Readdir(count int) (infos []os.FileInfo, err error) {
 	defer C.smb2_closedir(f.smb.session, list)
 	infos=make([]os.FileInfo, 0)
 	ent := C.smb2_readdir(f.smb.session, list)
-	for i:=0; ent!=nil && ( count < 0 || i<count); i++ {
+	for i:=0; ent!=nil && ( count <= 0 || i<count); i++ {
 		st := cSmbStat{name: C.GoString(ent.name), smbStat: ent.st}
 		infos = append(infos, st.toGoStat())
 		ent = C.smb2_readdir(f.smb.session, list)
