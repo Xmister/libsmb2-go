@@ -19,6 +19,10 @@ int smb2_read_wrapper(struct smb2_context *smb2, struct smb2fh *fh, void *buf, u
 	return smb2_read(smb2, fh, (uint8_t*) buf, count);
 }
 
+int smb2_write_wrapper(struct smb2_context *smb2, struct smb2fh *fh, void *buf, unsigned long count) {
+	return smb2_write(smb2, fh, (uint8_t*) buf, count);
+}
+
 int64_t smb2_lseek_wrapper(struct smb2_context *smb2, struct smb2fh *fh, long long offset, int whence) {
 	return smb2_lseek(smb2, fh, offset, whence, NULL);
 }
@@ -99,6 +103,14 @@ func (f *smbFile) Read(p []byte) (n int, err error) {
 	n=int(C.smb2_read_wrapper(f.smb.session, f.fd, unsafe.Pointer(&p[0]), C.ulong(len(p))))
 	if n <= 0 {
 		err=io.EOF
+	}
+	return
+}
+
+func (f *smbFile) Write(p []byte) (n int, err error) {
+	n=int(C.smb2_write_wrapper(f.smb.session, f.fd, unsafe.Pointer(&p[0]), C.ulong(len(p))));
+	if n <= 0 {
+		err = errors.New("Write error")
 	}
 	return
 }
