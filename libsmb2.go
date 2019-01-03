@@ -84,7 +84,7 @@ func (s* Smb) OpenFile(path string, mode int) (*smbFile, error) {
 	}
 	if file.fd = C.smb2_open(s.session, C.CString(path), C.int(mode)); file.fd == nil {
 		if file.dir = C.smb2_opendir(s.session, C.CString(path)); file.dir == nil {
-			return nil, errors.New(fmt.Sprintf("file open failed"))
+			return nil, errors.New(fmt.Sprintf("file open failed "+C.GoString(C.smb2_get_error(s.session))))
 		} else {
 			file.smbStat=&smbStat{}
 			file.smbStat.isDir = true
@@ -110,7 +110,7 @@ func (f *smbFile) Read(p []byte) (n int, err error) {
 func (f *smbFile) Write(p []byte) (n int, err error) {
 	n=int(C.smb2_write_wrapper(f.smb.session, f.fd, unsafe.Pointer(&p[0]), C.ulong(len(p))));
 	if n <= 0 {
-		err = errors.New("Write error")
+		err = errors.New("write error "+C.GoString(C.smb2_get_error(f.smb.session)))
 	}
 	return
 }
@@ -120,9 +120,13 @@ func (f *smbFile) Stat() (os.FileInfo, error) {
 }
 
 func (f *smbFile) Seek(offset int64, whence int) (res int64, err error){
-	res = int64(C.smb2_lseek_wrapper(f.smb.session, f.fd, C.longlong(offset), C.int(whence)))
+	if whence == io.SeekEnd {
+		res = int64(C.smb2_lseek_wrapper(f.smb.session, f.fd, C.longlong(f.Size()), C.int(io.SeekStart)))
+	} else {
+		res = int64(C.smb2_lseek_wrapper(f.smb.session, f.fd, C.longlong(offset), C.int(whence)))
+	}
 	if res < 0 {
-		err = errors.New("seek error")
+		err = errors.New("seek error: "+C.GoString(C.smb2_get_error(f.smb.session)))
 	}
 	return
 }
