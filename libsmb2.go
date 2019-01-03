@@ -15,8 +15,8 @@ import (
 #include <smb2.h>
 #include <libsmb2.h>
 
-int smb2_read_wrapper(struct smb2_context *smb2, struct smb2fh *fh, void *buf, unsigned long count) {
-	return smb2_read(smb2, fh, (uint8_t*) buf, count);
+int smb2_read_wrapper(struct smb2_context *smb2, struct smb2fh *fh, void *buf, unsigned long count, long long offset) {
+	return smb2_pread(smb2, fh, (uint8_t*) buf, count, offset);
 }
 
 int smb2_write_wrapper(struct smb2_context *smb2, struct smb2fh *fh, void *buf, unsigned long count) {
@@ -51,6 +51,7 @@ type smbFile struct {
 	fd		*C.struct_smb2fh
 	dir		*C.struct_smb2dir
 	path	string
+	pos		int64
 	*smbStat
 }
 
@@ -100,9 +101,11 @@ func (s* Smb) OpenFile(path string, mode int) (*smbFile, error) {
 }
 
 func (f *smbFile) Read(p []byte) (n int, err error) {
-	n=int(C.smb2_read_wrapper(f.smb.session, f.fd, unsafe.Pointer(&p[0]), C.ulong(len(p))))
+	n=int(C.smb2_read_wrapper(f.smb.session, f.fd, unsafe.Pointer(&p[0]), C.ulong(len(p)), C.longlong(f.pos)))
 	if n <= 0 {
 		err=io.EOF
+	} else {
+		f.pos+=int64(n)
 	}
 	return
 }
@@ -120,13 +123,16 @@ func (f *smbFile) Stat() (os.FileInfo, error) {
 }
 
 func (f *smbFile) Seek(offset int64, whence int) (res int64, err error){
+	realOffset := offset
 	if whence == io.SeekEnd {
-		res = int64(C.smb2_lseek_wrapper(f.smb.session, f.fd, C.longlong(f.Size()), C.int(io.SeekStart)))
-	} else {
-		res = int64(C.smb2_lseek_wrapper(f.smb.session, f.fd, C.longlong(offset), C.int(whence)))
+		realOffset = f.Size() + offset
+		whence = io.SeekStart
 	}
+	res = int64(C.smb2_lseek_wrapper(f.smb.session, f.fd, C.longlong(realOffset), C.int(whence)))
 	if res < 0 {
 		err = errors.New("seek error: "+C.GoString(C.smb2_get_error(f.smb.session)))
+	} else {
+		f.pos = res
 	}
 	return
 }
