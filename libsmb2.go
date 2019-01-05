@@ -65,10 +65,11 @@ func NewSmb() *Smb {
 func (s *Smb) Connect(host string, share string, user string, password string) error {
 	C.smb2_set_user(s.session, C.CString(user))
 	C.smb2_set_password(s.session, C.CString(password))
+
 	if code := C.smb2_connect_share(s.session, C.CString(host), C.CString(share), C.CString(user)); code == 0 {
 		return nil
 	} else {
-		return errors.New(fmt.Sprintf("unable to connect to %s, code %d", host, int(code)))
+		return errors.New(fmt.Sprintf("unable to connect to %s, code %d, %s", host, int(code), C.GoString(C.smb2_get_error(s.session))))
 	}
 }
 
