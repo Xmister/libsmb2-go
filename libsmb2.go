@@ -74,8 +74,11 @@ func (s *Smb) Connect(host string, share string, user string, password string) e
 }
 
 func (s* Smb) Disconnect() {
-	C.smb2_disconnect_share(s.session)
-	C.smb2_destroy_context(s.session)
+	if s.session != nil {
+		C.smb2_disconnect_share(s.session)
+		C.smb2_destroy_context(s.session)
+		s.session = nil
+	}
 }
 
 
