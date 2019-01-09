@@ -8,6 +8,7 @@ import (
 	path2 "path"
 	"time"
 	"unsafe"
+	"sync"
 )
 /*
 #include <stdint.h>
@@ -31,6 +32,7 @@ import "C"
 
 type Smb struct {
 	session *C.struct_smb2_context
+	mutex  sync.Mutex
 }
 
 type cSmbStat struct {
@@ -63,6 +65,8 @@ func NewSmb() *Smb {
 }
 
 func (s *Smb) Connect(host string, share string, user string, password string) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	C.smb2_set_user(s.session, C.CString(user))
 	C.smb2_set_password(s.session, C.CString(password))
 
@@ -74,6 +78,8 @@ func (s *Smb) Connect(host string, share string, user string, password string) e
 }
 
 func (s* Smb) Disconnect() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	if s.session != nil {
 		C.smb2_disconnect_share(s.session)
 		C.smb2_destroy_context(s.session)
@@ -83,6 +89,8 @@ func (s* Smb) Disconnect() {
 
 
 func (s* Smb) OpenFile(path string, mode int) (*smbFile, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	file := &smbFile{
 		smb: s,
 		path: path,
@@ -105,6 +113,11 @@ func (s* Smb) OpenFile(path string, mode int) (*smbFile, error) {
 }
 
 func (f *smbFile) Read(p []byte) (n int, err error) {
+	f.smb.mutex.Lock()
+	defer f.smb.mutex.Unlock()
+	if f.fd == nil || f.smb.session == nil {
+		return 0, io.EOF
+	}
 	n=int(C.smb2_read_wrapper(f.smb.session, f.fd, unsafe.Pointer(&p[0]), C.ulong(len(p)), C.longlong(f.pos)))
 	if n <= 0 {
 		err=io.EOF
@@ -115,6 +128,11 @@ func (f *smbFile) Read(p []byte) (n int, err error) {
 }
 
 func (f *smbFile) Write(p []byte) (n int, err error) {
+	f.smb.mutex.Lock()
+	defer f.smb.mutex.Unlock()
+	if f.fd == nil || f.smb.session == nil {
+		return 0, io.EOF
+	}
 	n=int(C.smb2_write_wrapper(f.smb.session, f.fd, unsafe.Pointer(&p[0]), C.ulong(len(p))));
 	if n <= 0 {
 		err = errors.New("write error "+C.GoString(C.smb2_get_error(f.smb.session)))
@@ -127,6 +145,11 @@ func (f *smbFile) Stat() (os.FileInfo, error) {
 }
 
 func (f *smbFile) Seek(offset int64, whence int) (res int64, err error){
+	f.smb.mutex.Lock()
+	defer f.smb.mutex.Unlock()
+	if f.fd == nil || f.smb.session == nil {
+		return 0, io.EOF
+	}
 	realOffset := offset
 	if whence == io.SeekEnd {
 		realOffset = f.Size() + offset
@@ -142,6 +165,8 @@ func (f *smbFile) Seek(offset int64, whence int) (res int64, err error){
 }
 
 func (f *smbFile) Readdir(count int) (infos []os.FileInfo, err error) {
+	f.smb.mutex.Lock()
+	defer f.smb.mutex.Unlock()
 	list := C.smb2_opendir(f.smb.session, C.CString(f.path))
 	defer C.smb2_closedir(f.smb.session, list)
 	infos=make([]os.FileInfo, 0)
@@ -158,11 +183,17 @@ func (f *smbFile) Readdir(count int) (infos []os.FileInfo, err error) {
 }
 
 func (f *smbFile) Close() error {
+	f.smb.mutex.Lock()
+	defer f.smb.mutex.Unlock()
+	if f.fd == nil || f.smb.session == nil {
+		return nil
+	}
 	if f.fd != nil {
 		C.smb2_close(f.smb.session, f.fd)
 	} else if f.dir != nil {
 		C.smb2_closedir(f.smb.session, f.dir)
 	}
+	f.fd = nil
 	return nil
 }
 
