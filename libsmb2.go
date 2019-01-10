@@ -55,6 +55,7 @@ type smbFile struct {
 	path	string
 	pos		int64
 	*smbStat
+	mutex  sync.Mutex
 }
 
 func NewSmb() *Smb {
@@ -91,6 +92,9 @@ func (s* Smb) Disconnect() {
 func (s* Smb) OpenFile(path string, mode int) (*smbFile, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	if s.session == nil {
+		return nil, errors.New("opening file on closed session")
+	}
 	file := &smbFile{
 		smb: s,
 		path: path,
