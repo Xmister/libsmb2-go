@@ -32,6 +32,7 @@ import "C"
 
 type Smb struct {
 	session *C.struct_smb2_context
+	connected bool
 	mutex  sync.Mutex
 }
 
@@ -72,20 +73,28 @@ func (s *Smb) Connect(host string, share string, user string, password string) e
 	C.smb2_set_password(s.session, C.CString(password))
 
 	if code := C.smb2_connect_share(s.session, C.CString(host), C.CString(share), C.CString(user)); code == 0 {
+		s.connected = true
 		return nil
 	} else {
+		s.disconnect()
 		return errors.New(fmt.Sprintf("unable to connect to %s, code %d, %s", host, int(code), C.GoString(C.smb2_get_error(s.session))))
+	}
+}
+
+func (s *Smb) disconnect() {
+	if s.session != nil {
+		if s.connected {
+			C.smb2_disconnect_share(s.session)
+		}
+		C.smb2_destroy_context(s.session)
+		s.session = nil
 	}
 }
 
 func (s* Smb) Disconnect() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	if s.session != nil {
-		C.smb2_disconnect_share(s.session)
-		C.smb2_destroy_context(s.session)
-		s.session = nil
-	}
+	s.disconnect()
 }
 
 
