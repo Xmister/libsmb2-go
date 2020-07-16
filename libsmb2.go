@@ -117,6 +117,7 @@ func (f *smbFile) Read(p []byte) (n int, err error) {
 	n=int(C.smb2_read_wrapper(f.smb.session, f.fd, unsafe.Pointer(&p[0]), C.ulong(len(p)), C.longlong(f.pos)))
 	if n <= 0 {
 		err=io.EOF
+		n = 0
 	} else {
 		f.pos+=int64(n)
 	}
